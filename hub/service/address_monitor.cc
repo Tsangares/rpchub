@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2018 IOTA Stiftung
- * https://github.com/iotaledger/rpchub
+ * https://github.com/iotaledger/hub
  *
  * Refer to the LICENSE file for licensing information
  */
@@ -16,6 +16,7 @@
 #include <utility>
 
 #include <gflags/gflags.h>
+#include <glog/logging.h>
 
 #include <boost/asio/io_service.hpp>
 #include <boost/bind.hpp>
@@ -96,6 +97,11 @@ void AddressMonitor::persistBalanceChanges(
 }
 
 bool AddressMonitor::doTick() {
+  if (!_api->isNodeSolid()) {
+    LOG(INFO) << "Node is not solid. Skipping address monitoring.";
+    return true;
+  }
+
   auto changes = calculateBalanceChanges();
 
   if (!changes.empty()) {

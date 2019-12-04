@@ -9,11 +9,12 @@
 namespace signing {
 namespace cmd {
 
-grpc::Status GetSignatureForUUID::doProcess(
+    common::cmd::Error GetSignatureForUUID::doProcess(
     const signing::rpc::GetSignatureForUUIDRequest* request,
     signing::rpc::GetSignatureForUUIDReply* response) noexcept {
   try {
-    LOG(INFO) << session() << " GetSignatureForUUID - uuid: " << request->uuid()<<" bundle hash: "<<request->bundlehash();
+    LOG(INFO) << session() << " GetSignatureForUUID - uuid: " << request->uuid()
+              << " bundle hash: " << request->bundlehash();
 
     common::crypto::UUID uuid(request->uuid());
     common::crypto::Hash bundleHash(request->bundlehash());
@@ -25,15 +26,15 @@ grpc::Status GetSignatureForUUID::doProcess(
   } catch (const std::runtime_error& ex) {
     LOG(ERROR) << session() << "Failed: " << ex.what();
 
-    return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION, "", "");
+    return common::cmd::UNKNOWN_ERROR;
   }
 
-  return grpc::Status::OK;
+  return common::cmd::OK;
 }
 
 }  // namespace cmd
 
-}  // namespace crypto
+}  // namespace signing
 
 //
 // Created by tsvi on 6/27/18.

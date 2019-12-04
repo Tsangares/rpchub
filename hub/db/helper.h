@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2018 IOTA Stiftung
- * https://github.com/iotaledger/rpchub
+ * https://github.com/iotaledger/hub
  *
  * Refer to the LICENSE file for licensing information
  */
@@ -42,6 +42,7 @@ struct helper {
                                     const common::crypto::UUID& uuid);
   static void createUserAddressBalanceEntry(
       C& connection, uint64_t addressId, int64_t amount,
+      nonstd::optional<common::crypto::Message> message,
       const UserAddressBalanceReason reason,
       nonstd::optional<std::string> tailHash,
       nonstd::optional<uint64_t> sweepId);
@@ -60,8 +61,10 @@ struct helper {
   static nonstd::optional<AddressWithUUID> selectFirstUserAddress(
       C& connection);
   static void markUUIDAsSigned(C& connection, const common::crypto::UUID& uuid);
+
   static std::vector<UserAccountBalanceEvent> getUserAccountBalances(
-      C& connection, uint64_t userId);
+      C& connection, uint64_t userId,
+      std::chrono::system_clock::time_point newerThan);
 
   static std::vector<UserAddressBalanceEvent>
   getAllUserAddressesBalancesSinceTimePoint(
@@ -133,6 +136,8 @@ struct helper {
       C& connection, const common::crypto::Address& address);
 
   static bool isSweepConfirmed(C& connection, uint64_t sweepId);
+
+  static uint64_t getTotalBalance(C& connection);
 };
 
 }  // namespace db

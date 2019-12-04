@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2018 IOTA Stiftung
- * https://github.com/iotaledger/rpchub
+ * https://github.com/iotaledger/hub
  *
  * Refer to the LICENSE file for licensing information
  */
@@ -57,8 +57,8 @@ class CryptoProviderBase {
   /// @return string - the signature
   virtual nonstd::optional<std::string> getSignatureForUUID(
       const common::crypto::UUID& uuid,
-      const common::crypto::Hash& bundleHash) const{
-      return doGetSignatureForUUID(uuid, bundleHash);
+      const common::crypto::Hash& bundleHash) const {
+    return doGetSignatureForUUID(uuid, bundleHash);
   }
 
  protected:

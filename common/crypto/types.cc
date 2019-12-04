@@ -1,14 +1,16 @@
 /*
  * Copyright (c) 2018 IOTA Stiftung
- * https://github.com/iotaledger/rpchub
+ * https://github.com/iotaledger/hub
  *
  * Refer to the LICENSE file for licensing information
  */
 
 #include "common/crypto/types.h"
 
+#include <glog/logging.h>
+#include <boost/random.hpp>
+#include <boost/random/random_device.hpp>
 #include <cstring>
-#include <random>
 #include <utility>
 
 namespace common {
@@ -16,9 +18,8 @@ namespace crypto {
 
 std::array<uint8_t, UUID::UUID_SIZE> UUID::generate() {
   std::array<uint8_t, UUID_SIZE> res;
-  std::random_device rd;
-  std::uniform_int_distribution<> index_dist(0, UUID_SIZE - 1);
-
+  boost::random::random_device rd;
+  boost::random::uniform_int_distribution<> index_dist(0, UUID_SIZE - 1);
   for (uint32_t i = 0; i < UUID_SIZE; ++i) {
     res[i] = BASE64_CHARS[index_dist(rd)];
   }
@@ -32,7 +33,13 @@ std::array<uint8_t, UUID::UUID_SIZE> UUID::fromStringView(
   return res;
 }
 
-UUID::UUID() : _data(UUID::generate()) {}
+UUID::UUID() {
+  try {
+    _data = std::move(UUID::generate());
+  } catch (const std::exception& ex) {
+    LOG(FATAL) << " Failed in generating UUID: " << ex.what();
+  }
+}
 
 UUID::UUID(const std::string_view& sv) : _data(fromStringView(sv)) {}
 

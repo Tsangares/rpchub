@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2018 IOTA Stiftung
- * https://github.com/iotaledger/rpchub
+ * https://github.com/iotaledger/hub
  *
  * Refer to the LICENSE file for licensing information
  */
@@ -25,6 +25,11 @@ DECLARE_uint32(argon2TCost);
 DECLARE_uint32(argon2MCost);
 DECLARE_uint32(argon2Parallelism);
 DECLARE_uint32(argon2Mode);
+// IOTA seeds
+DECLARE_uint32(keySecLevel);
+// Http server
+DECLARE_uint32(numThreadsHttp);
+DECLARE_string(sslDH);
 }  // namespace flags
 }  // namespace common
 

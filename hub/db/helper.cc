@@ -1,11 +1,9 @@
 /*
  * Copyright (c) 2018 IOTA Stiftung
- * https://github.com/iotaledger/rpchub
+ * https://github.com/iotaledger/hub
  *
  * Refer to the LICENSE file for licensing information
  */
-
-#include "hub/db/helper.h"
 
 #include <algorithm>
 #include <unordered_map>
@@ -22,6 +20,8 @@
 
 #include <sqlpp11/mysql/connection.h>
 #include <sqlpp11/sqlite3/connection.h>
+
+#include "hub/db/helper.h"
 
 namespace hub {
 namespace db {
@@ -104,29 +104,41 @@ uint64_t helper<C>::createUserAddress(C& connection,
                                       const common::crypto::UUID& uuid) {
   db::sql::UserAddress userAddress;
 
-  return connection(insert_into(userAddress)
-                        .set(userAddress.address = address.str(),
-                             userAddress.userId = userId,
-                             userAddress.seedUuid = uuid.str()));
+  auto now = ::sqlpp::chrono::floor<::std::chrono::milliseconds>(
+      std::chrono::system_clock::now());
+
+  return connection(
+      insert_into(userAddress)
+          .set(userAddress.address = address.str(), userAddress.userId = userId,
+               userAddress.seedUuid = uuid.str(), userAddress.createdAt = now));
 }
 
 template <typename C>
 void helper<C>::createUserAddressBalanceEntry(
     C& connection, uint64_t addressId, int64_t amount,
+    nonstd::optional<common::crypto::Message> message,
     const UserAddressBalanceReason reason,
     nonstd::optional<std::string> tailHash,
     nonstd::optional<uint64_t> sweepId) {
   db::sql::UserAddressBalance bal;
 
+  auto now = ::sqlpp::chrono::floor<::std::chrono::milliseconds>(
+      std::chrono::system_clock::now());
+
   if (reason == UserAddressBalanceReason::DEPOSIT) {
+    auto messageValue = message.has_value() && !message.value().isNull()
+                            ? message.value().str()
+                            : "";
+    connection(insert_into(bal).set(
+        bal.userAddress = addressId, bal.amount = amount,
+        bal.reason = static_cast<int>(reason),
+        bal.tailHash = tailHash.has_value() ? std::move(tailHash.value()) : "",
+        bal.occuredAt = now, bal.message = messageValue));
+  } else {
     connection(
         insert_into(bal).set(bal.userAddress = addressId, bal.amount = amount,
                              bal.reason = static_cast<int>(reason),
-                             bal.tailHash = std::move(tailHash.value())));
-  } else {
-    connection(insert_into(bal).set(
-        bal.userAddress = addressId, bal.amount = amount,
-        bal.reason = static_cast<int>(reason), bal.sweep = sweepId.value()));
+                             bal.sweep = sweepId.value(), bal.occuredAt = now));
   }
 }
 
@@ -137,18 +149,24 @@ void helper<C>::createUserAccountBalanceEntry(
     const nonstd::optional<uint64_t> fkey) {
   db::sql::UserAccountBalance bal;
 
+  auto now = ::sqlpp::chrono::floor<::std::chrono::milliseconds>(
+      std::chrono::system_clock::now());
+
   if (reason == UserAccountBalanceReason::SWEEP) {
     connection(insert_into(bal).set(bal.userId = userId, bal.amount = amount,
                                     bal.reason = static_cast<int>(reason),
-                                    bal.sweep = fkey.value()));
+                                    bal.sweep = fkey.value(),
+                                    bal.occuredAt = now));
   } else if (reason == UserAccountBalanceReason::WITHDRAWAL ||
              reason == UserAccountBalanceReason::WITHDRAWAL_CANCEL) {
     connection(insert_into(bal).set(bal.userId = userId, bal.amount = amount,
                                     bal.reason = static_cast<int>(reason),
-                                    bal.withdrawal = fkey.value()));
+                                    bal.withdrawal = fkey.value(),
+                                    bal.occuredAt = now));
   } else {
     connection(insert_into(bal).set(bal.userId = userId, bal.amount = amount,
-                                    bal.reason = static_cast<int>(reason)));
+                                    bal.reason = static_cast<int>(reason),
+                                    bal.occuredAt = now));
   }
 }
 
@@ -158,10 +176,13 @@ uint64_t helper<C>::createWithdrawal(
     const common::crypto::Tag& tag,
     const common::crypto::Address& payoutAddress) {
   db::sql::Withdrawal tbl;
+  auto now = ::sqlpp::chrono::floor<::std::chrono::milliseconds>(
+      std::chrono::system_clock::now());
 
   return connection(insert_into(tbl).set(
       tbl.uuid = uuid, tbl.userId = userId, tbl.amount = amount,
-      tbl.payoutAddress = payoutAddress.str(), tbl.tag = tag.str()));
+      tbl.payoutAddress = payoutAddress.str(), tbl.tag = tag.str(),
+      tbl.requestedAt = now));
 }
 
 template <typename C>
@@ -242,7 +263,11 @@ void helper<C>::createTail(C& connection, uint64_t sweepId,
                            const std::string& hash) {
   db::sql::SweepTails tls;
 
-  connection(insert_into(tls).set(tls.sweep = sweepId, tls.hash = hash));
+  auto now = ::sqlpp::chrono::floor<::std::chrono::milliseconds>(
+      std::chrono::system_clock::now());
+
+  connection(insert_into(tls).set(tls.sweep = sweepId, tls.hash = hash,
+                                  tls.createdAt = now));
 }
 
 template <typename C>
@@ -259,7 +284,7 @@ std::vector<SweepTail> helper<C>::getTailsForSweep(C& connection,
   for (const auto& row : result) {
     std::chrono::time_point<std::chrono::system_clock> ts =
         row.createdAt.value();
-    tails.emplace_back(SweepTail{std::move(row.hash), ts});
+    tails.emplace_back(SweepTail{hash : std::move(row.hash), createdAt : ts});
   }
 
   return tails;
@@ -274,25 +299,61 @@ void helper<C>::markTailAsConfirmed(C& connection, const std::string& hash) {
 
 template <typename C>
 std::vector<UserAccountBalanceEvent> helper<C>::getUserAccountBalances(
-    C& connection, uint64_t userId) {
+    C& connection, uint64_t userId,
+    std::chrono::system_clock::time_point newerThan) {
   db::sql::UserAccountBalance bal;
   db::sql::UserAccount acc;
+  db::sql::Withdrawal withdrawal;
+  db::sql::Sweep swp;
 
   // Might wanna add sweep's bundle hash or withdrawal uuid in the future.
-  auto result =
-      connection(select(acc.identifier, bal.amount, bal.reason, bal.occuredAt)
-                     .from(bal.join(acc).on(bal.userId == acc.id))
-                     .where(bal.userId == userId));
+  auto result = connection(
+      select(acc.identifier, bal.amount, bal.reason, bal.occuredAt,
+             withdrawal.uuid, swp.bundleHash)
+          .from(bal.join(acc)
+                    .on(bal.userId == acc.id)
+                    .left_outer_join(swp)
+                    .on(bal.sweep == swp.id)
+                    .left_outer_join(withdrawal)
+                    .on(bal.withdrawal == withdrawal.id))
+          .where(bal.userId == userId && bal.occuredAt >= newerThan));
 
   std::vector<UserAccountBalanceEvent> balances;
 
   for (auto& row : result) {
     std::chrono::time_point<std::chrono::system_clock> ts =
         row.occuredAt.value();
-    UserAccountBalanceEvent event = {
-        std::move(row.identifier), ts, row.amount,
-        static_cast<UserAccountBalanceReason>((row.reason.value()))};
-    balances.emplace_back(std::move(event));
+    if (static_cast<long int>(row.reason) ==
+        static_cast<long int>(UserAccountBalanceReason::SWEEP)) {
+      balances.emplace_back(UserAccountBalanceEvent{
+        userIdentifier : std::move(row.identifier),
+        timestamp : ts,
+        amount : row.amount,
+        reason : static_cast<UserAccountBalanceReason>((row.reason.value())),
+        sweepBundleHash : row.bundleHash
+      });
+    } else if (static_cast<long int>(row.reason) ==
+                   static_cast<long int>(
+                       UserAccountBalanceReason::WITHDRAWAL) ||
+               static_cast<long int>(row.reason) ==
+                   static_cast<long int>(
+                       UserAccountBalanceReason::WITHDRAWAL_CANCEL)) {
+      balances.emplace_back(UserAccountBalanceEvent{
+        userIdentifier : std::move(row.identifier),
+        timestamp : ts,
+        amount : row.amount,
+        reason : static_cast<UserAccountBalanceReason>((row.reason.value())),
+        sweepBundleHash : "",
+        withdrawalUUID : row.uuid
+      });
+    } else {
+      balances.emplace_back(UserAccountBalanceEvent{
+        userIdentifier : std::move(row.identifier),
+        timestamp : ts,
+        amount : row.amount,
+        reason : static_cast<UserAccountBalanceReason>((row.reason.value()))
+      });
+    }
   }
   return balances;
 }
@@ -332,13 +393,23 @@ helper<C>::getAllUsersAccountBalancesSinceTimePoint(
         row.occuredAt.value();
     auto reason = static_cast<UserAccountBalanceReason>(row.reason.value());
     if (reason == UserAccountBalanceReason::SWEEP) {
-      balances.emplace_back(
-          UserAccountBalanceEvent{std::move(row.identifier), ts, row.amount,
-                                  reason, std::move(row.bundleHash), ""});
+      balances.emplace_back(UserAccountBalanceEvent{
+        userIdentifier : std::move(row.identifier),
+        timestamp : ts,
+        amount : row.amount,
+        reason : reason,
+        sweepBundleHash : std::move(row.bundleHash),
+        withdrawalUUID : ""
+      });
     } else {
-      balances.emplace_back(UserAccountBalanceEvent{std::move(row.identifier),
-                                                    ts, row.amount, reason, "",
-                                                    std::move(row.uuid)});
+      balances.emplace_back(UserAccountBalanceEvent{
+        userIdentifier : std::move(row.identifier),
+        timestamp : ts,
+        amount : row.amount,
+        reason : reason,
+        sweepBundleHash : "",
+        withdrawalUUID : std::move(row.uuid)
+      });
     }
   }
 
@@ -355,8 +426,8 @@ helper<C>::getAllUserAddressesBalancesSinceTimePoint(
   db::sql::Sweep swp;
 
   auto result =
-      connection(select(acc.identifier, add.address, bal.amount, bal.reason,
-                        bal.tailHash, bal.occuredAt, swp.bundleHash)
+      connection(select(acc.identifier, add.address, bal.amount, bal.message,
+                        bal.reason, bal.tailHash, bal.occuredAt, swp.bundleHash)
                      .from(bal.join(add)
                                .on(bal.userAddress == add.id)
                                .join(acc)
@@ -377,12 +448,14 @@ helper<C>::getAllUserAddressesBalancesSinceTimePoint(
                            : std::move(row.tailHash.value());
 
     UserAddressBalanceEvent e{
-        std::move(row.identifier),
-        std::move(row.address),
-        row.amount,
-        static_cast<UserAddressBalanceReason>(row.reason.value()),
-        std::move(hash),
-        ts};
+      userIdentifier : std::move(row.identifier),
+      userAddress : std::move(row.address),
+      amount : row.amount,
+      reason : static_cast<UserAddressBalanceReason>(row.reason.value()),
+      hash : std::move(hash),
+      timestamp : ts,
+      message : sqlpp::is_null(row.message) ? "" : row.message.value()
+    };
 
     balances.emplace_back(std::move(e));
   }
@@ -413,9 +486,12 @@ helper<C>::getAllHubAddressesBalancesSinceTimePoint(
         row.occuredAt.value();
 
     balances.emplace_back(HubAddressBalanceEvent{
-        std::move(row.address), row.amount,
-        static_cast<HubAddressBalanceReason>(row.reason.value()),
-        std::move(row.bundleHash), ts});
+      hubAddress : std::move(row.address),
+      amount : row.amount,
+      reason : static_cast<HubAddressBalanceReason>(row.reason.value()),
+      sweepBundleHash : std::move(row.bundleHash),
+      timestamp : ts
+    });
   }
 
   return balances;
@@ -444,8 +520,11 @@ std::vector<SweepEvent> helper<C>::getSweeps(
       std::vector<std::string> uuids;
       std::chrono::time_point<std::chrono::system_clock> ts =
           row.createdAt.value();
-      currEvent = &events.emplace_back(
-          SweepEvent{std::move(row.bundleHash), ts, std::move(uuids)});
+      currEvent = &events.emplace_back(SweepEvent{
+        bundleHash : std::move(row.bundleHash),
+        timestamp : ts,
+        withdrawalUUIDs : std::move(uuids)
+      });
     }
 
     if (!std::string{row.uuid}.empty()) {
@@ -465,6 +544,7 @@ void helper<C>::insertUserTransfers(
   if (transfers.empty()) {
     return;
   }
+
   auto multi_insert =
       insert_into(bal).columns(bal.userId, bal.amount, bal.reason);
 
@@ -531,11 +611,17 @@ WithdrawalInfo helper<C>::getWithdrawalInfoFromUUID(C& connection,
                                                     const std::string& uuid) {
   db::sql::Withdrawal tbl;
 
-  auto result = connection(
-      select(tbl.id, tbl.userId, tbl.amount).from(tbl).where(tbl.uuid == uuid));
+  auto result =
+      connection(select(tbl.id, tbl.userId, tbl.amount, tbl.cancelledAt)
+                     .from(tbl)
+                     .where(tbl.uuid == uuid));
 
-  return {static_cast<uint64_t>(result.front().id),
-          static_cast<uint64_t>(result.front().userId), result.front().amount};
+  return {
+    id : static_cast<uint64_t>(result.front().id),
+    userId : static_cast<uint64_t>(result.front().userId),
+    amount : result.front().amount,
+    wasCancelled : result.front().cancelledAt.is_null() ? false : true
+  };
 }
 
 template <typename C>
@@ -544,8 +630,12 @@ int64_t helper<C>::createHubAddress(C& connection,
                                     const common::crypto::Address& address) {
   db::sql::HubAddress tbl;
 
+  auto now = ::sqlpp::chrono::floor<::std::chrono::milliseconds>(
+      std::chrono::system_clock::now());
+
   return connection(insert_into(tbl).set(tbl.seedUuid = uuid.str(),
-                                         tbl.address = address.str()));
+                                         tbl.address = address.str(),
+                                         tbl.createdAt = now));
 }
 
 template <typename C>
@@ -554,9 +644,13 @@ void helper<C>::createHubAddressBalanceEntry(
     const HubAddressBalanceReason reason, uint64_t sweepId) {
   db::sql::HubAddressBalance bal;
 
-  connection(insert_into(bal).set(
-      bal.hubAddress = hubAddress, bal.amount = amount,
-      bal.reason = static_cast<int>(reason), bal.sweep = sweepId));
+  auto now = ::sqlpp::chrono::floor<::std::chrono::milliseconds>(
+      std::chrono::system_clock::now());
+
+  connection(insert_into(bal).set(bal.hubAddress = hubAddress,
+                                  bal.amount = amount,
+                                  bal.reason = static_cast<int>(reason),
+                                  bal.sweep = sweepId, bal.occuredAt = now));
 }
 
 template <typename C>
@@ -583,9 +677,12 @@ int64_t helper<C>::createSweep(C& connection,
                                uint64_t intoHubAddress) {
   db::sql::Sweep tbl;
 
-  return connection(insert_into(tbl).set(tbl.bundleHash = bundleHash.str(),
-                                         tbl.trytes = bundleTrytes,
-                                         tbl.intoHubAddress = intoHubAddress));
+  auto now = ::sqlpp::chrono::floor<::std::chrono::milliseconds>(
+      std::chrono::system_clock::now());
+
+  return connection(insert_into(tbl).set(
+      tbl.bundleHash = bundleHash.str(), tbl.trytes = bundleTrytes,
+      tbl.intoHubAddress = intoHubAddress, tbl.createdAt = now));
 }
 
 template <typename C>
@@ -599,7 +696,8 @@ std::vector<TransferOutput> helper<C>::getWithdrawalsForSweep(
   auto result =
       connection(select(tbl.id, tbl.amount, tbl.tag, tbl.payoutAddress)
                      .from(tbl)
-                     .where(tbl.requestedAt <= olderThan && tbl.sweep.is_null())
+                     .where(tbl.requestedAt <= olderThan &&
+                            tbl.sweep.is_null() && tbl.cancelledAt.is_null())
                      .order_by(tbl.requestedAt.asc())
                      .limit(max));
 
@@ -611,8 +709,11 @@ std::vector<TransferOutput> helper<C>::getWithdrawalsForSweep(
     }
 
     outputs.emplace_back(TransferOutput{
-        row.id, static_cast<uint64_t>(row.amount), std::move(maybeTag),
-        common::crypto::Address(row.payoutAddress.value())});
+      id : row.id,
+      amount : static_cast<uint64_t>(row.amount),
+      tag : std::move(maybeTag),
+      payoutAddress : common::crypto::Address(row.payoutAddress.value())
+    });
   }
 
   return outputs;
@@ -646,10 +747,13 @@ std::vector<TransferInput> helper<C>::getDepositsForSweep(
   std::vector<TransferInput> deposits;
 
   for (const auto& row : result) {
-    TransferInput ti = {row.id, row.userId,
-                        common::crypto::Address(row.address.value()),
-                        common::crypto::UUID(row.seedUuid.value()),
-                        static_cast<uint64_t>(row.balance)};
+    TransferInput ti = {
+      addressId : row.id,
+      userId : static_cast<uint64_t>(row.userId),
+      address : common::crypto::Address(row.address.value()),
+      uuid : common::crypto::UUID(row.seedUuid.value()),
+      amount : static_cast<uint64_t>(row.balance)
+    };
     deposits.push_back(std::move(ti));
   }
 
@@ -680,9 +784,13 @@ std::vector<TransferInput> helper<C>::getHubInputsForSweep(
   for (const auto& row : availableAddressesResult) {
     auto id = row.id;
 
-    TransferInput input = {id, 0, common::crypto::Address(row.address.value()),
-                           common::crypto::UUID(row.seedUuid.value()),
-                           static_cast<uint64_t>(row.balance)};
+    TransferInput input = {
+      addressId : id,
+      userId : 0,
+      address : common::crypto::Address(row.address.value()),
+      uuid : common::crypto::UUID(row.seedUuid.value()),
+      amount : static_cast<uint64_t>(row.balance)
+    };
 
     addressIds.push_back(id);
     availableInputs.emplace_back(std::move(input));
@@ -746,7 +854,7 @@ nonstd::optional<AddressInfo> helper<C>::getAddressInfo(
 
   auto result = connection(
       select(
-          acc.identifier, add.seedUuid,
+          add.id, acc.identifier, add.seedUuid,
           exists(select(bal.id).from(bal).where(
               bal.userAddress == add.id &&
               bal.reason == static_cast<int>(UserAddressBalanceReason::SWEEP))))
@@ -757,9 +865,12 @@ nonstd::optional<AddressInfo> helper<C>::getAddressInfo(
     return {};
   } else {
     auto& front = result.front();
-    return {AddressInfo{std::move(front.identifier.value()),
-                        common::crypto::UUID(front.seedUuid.value()),
-                        front.exists}};
+    return {AddressInfo{
+      id : static_cast<uint64_t>(front.id),
+      userId : std::move(front.identifier.value()),
+      uuid : common::crypto::UUID(front.seedUuid.value()),
+      usedForSweep : front.exists
+    }};
   }
 }
 
@@ -820,7 +931,6 @@ template <typename C>
 nonstd::optional<hub::db::SweepDetail> helper<C>::getSweepDetailByBundleHash(
     C& connection, const common::crypto::Hash& bundleHash) {
   db::sql::Sweep swp;
-  db::sql::SweepTails tls;
 
   hub::db::SweepDetail sweepsDetails;
 
@@ -847,6 +957,14 @@ nonstd::optional<hub::db::SweepDetail> helper<C>::getSweepDetailByBundleHash(
   }
 
   return sweepsDetails;
+}
+
+template <typename C>
+uint64_t helper<C>::getTotalBalance(C& connection) {
+  db::sql::UserAccount acc;
+  return connection(select(sum(acc.balance)).unconditionally().from(acc))
+      .front()
+      .sum;
 }
 
 template struct helper<sqlpp::mysql::connection>;

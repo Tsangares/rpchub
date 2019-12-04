@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2018 IOTA Stiftung
- * https://github.com/iotaledger/rpchub
+ * https://github.com/iotaledger/hub
  *
  * Refer to the LICENSE file for licensing information
  */
@@ -8,13 +8,13 @@
 #ifndef HUB_CRYPTO_REMOTE_SIGNING_PROVIDER_H_
 #define HUB_CRYPTO_REMOTE_SIGNING_PROVIDER_H_
 
-#include <string>
 #include <memory>
+#include <string>
+
 #include <nonstd/optional.hpp>
+
 #include "common/crypto/provider_base.h"
-
 #include "hub/db/db.h"
-
 #include "proto/signing_server.grpc.pb.h"
 #include "proto/signing_server.pb.h"
 

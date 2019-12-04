@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2018 IOTA Stiftung
- * https://github.com/iotaledger/rpchub
+ * https://github.com/iotaledger/hub
  *
  * Refer to the LICENSE file for licensing information
  */
@@ -24,4 +24,4 @@ std::string errorToString(const signing::rpc::ErrorCode& e) {
   return ss.str();
 }
 }  // namespace cmd
-}  // namespace crypto
+}  // namespace signing

@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2018 IOTA Stiftung
- * https://github.com/iotaledger/rpchub
+ * https://github.com/iotaledger/hub
  *
  * Refer to the LICENSE file for licensing information
  */
@@ -15,7 +15,8 @@ POWManager& POWManager::get() {
   return instance;
 }
 
-cppclient::GetTransactionsToApproveResponse POWProvider::getAttachmentPoint(
+nonstd::optional<cppclient::GetTransactionsToApproveResponse>
+POWProvider::getAttachmentPoint(
     const nonstd::optional<std::string>& reference) const {
   return _api->getTransactionsToApprove(_depth, reference);
 }

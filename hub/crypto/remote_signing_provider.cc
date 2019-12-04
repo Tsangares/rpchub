@@ -1,13 +1,9 @@
 /*
  * Copyright (c) 2018 IOTA Stiftung
- * https://github.com/iotaledger/rpchub
+ * https://github.com/iotaledger/hub
  *
  * Refer to the LICENSE file for licensing information
  */
-
-#include "hub/crypto/remote_signing_provider.h"
-
-#include <utility>
 
 #include <glog/logging.h>
 #include <grpc/grpc.h>
@@ -17,6 +13,8 @@
 #include <grpcpp/security/credentials.h>
 
 #include "common/common.h"
+
+#include "hub/crypto/remote_signing_provider.h"
 
 using grpc::Channel;
 using grpc::ClientContext;
@@ -29,18 +27,18 @@ RemoteSigningProvider::RemoteSigningProvider(const std::string& url,
                                              const std::string& certPath,
                                              const std::string& chainPath,
                                              const std::string& keyPath) {
-    std::string cert = common::readFile(certPath);
-    std::string chain = common::readFile(chainPath);
-    std::string key = common::readFile(keyPath);
-    grpc::SslCredentialsOptions opts;
-    opts.pem_root_certs = cert;
-    opts.pem_cert_chain = chain;
-    opts.pem_private_key = key;
+  std::string cert = common::readFile(certPath);
+  std::string chain = common::readFile(chainPath);
+  std::string key = common::readFile(keyPath);
+  grpc::SslCredentialsOptions opts;
+  opts.pem_root_certs = cert;
+  opts.pem_cert_chain = chain;
+  opts.pem_private_key = key;
 
-    auto credentials = grpc::SslCredentials(opts);
+  auto credentials = grpc::SslCredentials(opts);
 
-    auto channelSharedPtr = grpc::CreateChannel(url, credentials);
-    _stub = signing::rpc::SigningServer::NewStub(channelSharedPtr);
+  auto channelSharedPtr = grpc::CreateChannel(url, credentials);
+  _stub = signing::rpc::SigningServer::NewStub(channelSharedPtr);
 }
 
 /// Get a new address for a given UUID and the salt
@@ -101,4 +99,3 @@ nonstd::optional<std::string> RemoteSigningProvider::doGetSignatureForUUID(
 
 }  // namespace crypto
 }  // namespace hub
-

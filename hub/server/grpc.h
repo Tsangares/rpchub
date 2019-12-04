@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2018 IOTA Stiftung
- * https://github.com/iotaledger/rpchub
+ * https://github.com/iotaledger/hub
  *
  * Refer to the LICENSE file for licensing information
  */
@@ -12,6 +12,7 @@
 
 #include <grpc++/grpc++.h>
 
+#include "cppclient/api.h"
 #include "proto/hub.grpc.pb.h"
 #include "proto/hub.pb.h"
 
@@ -34,6 +35,8 @@ class HubImpl final : public hub::rpc::Hub::Service {
   HubImpl() {}
   /// Destructor
   ~HubImpl() override {}
+
+  void setApi(std::shared_ptr<cppclient::IotaAPI> api);
 
   /// Creates a new user
   /// @param[in] context - server context
@@ -74,13 +77,13 @@ class HubImpl final : public hub::rpc::Hub::Service {
 
   /// Cancels a previous withdrawal request (if not processed)
   /// @param[in] context - server context
-  /// @param[in] request - a rpc::UserWithdrawCancelRequest request
-  /// @param[in] response - a rpc::UserWithdrawCancelReply response
+  /// @param[in] rpcRequest - a rpc::UserWithdrawCancelRequest request
+  /// @param[in] rpcResponse - a rpc::UserWithdrawCancelReply response
   /// @return grpc::Status
   grpc::Status UserWithdrawCancel(
       grpc::ServerContext* context,
-      const hub::rpc::UserWithdrawCancelRequest* request,
-      hub::rpc::UserWithdrawCancelReply* response) override;
+      const hub::rpc::UserWithdrawCancelRequest* rpcRequest,
+      hub::rpc::UserWithdrawCancelReply* rpcResponse) override;
 
   /// Get the history for a user
   /// @param[in] context - server context
@@ -131,6 +134,45 @@ class HubImpl final : public hub::rpc::Hub::Service {
   grpc::Status SweepDetail(grpc::ServerContext* context,
                            const hub::rpc::SweepDetailRequest* request,
                            hub::rpc::SweepDetailReply* response) override;
+
+  grpc::Status GetStats(grpc::ServerContext* context,
+                        const hub::rpc::GetStatsRequest* request,
+                        hub::rpc::GetStatsReply* response) override;
+
+  /// Returns true if withdrawal was cancelled
+  /// @param[in] context - server context
+  /// @param[in] request - a rpc::WasWithdrawalCancelledRequest request
+  /// @param[in] response - a rpc::WasWithdrawalCancelledResponse response
+  /// @return grpc::Status
+
+  grpc::Status WasWithdrawalCancelled(
+      grpc::ServerContext* context,
+      const hub::rpc::WasWithdrawalCancelledRequest* request,
+      hub::rpc::WasWithdrawalCancelledReply* response) override;
+
+  /// Returns true if address was spent from
+  /// @param[in] context - server context
+  /// @param[in] request - a rpc::wasAddressSpentFromRequest request
+  /// @param[in] response - a rpc::wasAddressSpentFromReply response
+  /// @return grpc::Status
+
+  grpc::Status WasAddressSpentFrom(
+      grpc::ServerContext* context,
+      const hub::rpc::WasAddressSpentFromRequest* request,
+      hub::rpc::WasAddressSpentFromReply* response) override;
+
+  /// Recover funds from an already spent address
+  /// @param[in] context - server context
+  /// @param[in] request - a rpc::RecoverFundsRequest request
+  /// @param[in] response - a rpc::RecoverFundsReply response
+  /// @return grpc::Status
+
+  grpc::Status RecoverFunds(grpc::ServerContext* context,
+                            const hub::rpc::RecoverFundsRequest* request,
+                            hub::rpc::RecoverFundsReply* response) override;
+
+ private:
+  std::shared_ptr<cppclient::IotaAPI> _api;
 };
 
 }  // namespace hub

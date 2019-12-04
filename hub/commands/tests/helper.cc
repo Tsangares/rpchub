@@ -7,14 +7,13 @@ namespace hub {
 namespace tests {
 
 std::map<uint64_t, int64_t> createZigZagTransfer(
-    std::vector<std::string>& users, rpc::ProcessTransferBatchRequest& req,
+    std::vector<std::string>& users, cmd::ProcessTransferBatchRequest& req,
     int64_t absAmount) {
   std::map<uint64_t, int64_t> idsToTransAmount;
-  for (auto i = 0; i < users.size(); ++i) {
-    auto* transfer = req.add_transfers();
+  for (uint32_t i = 0; i < users.size(); ++i) {
     int64_t mul = (i % 2) ? 1 : -1;
-    transfer->set_amount(mul * absAmount);
-    transfer->set_userid(users[i]);
+    req.transfers.emplace_back(
+        cmd::UserTransfer{userId : users[i], amount : mul * absAmount});
     idsToTransAmount[i + 1] = mul * absAmount;
   }
   return idsToTransAmount;
@@ -25,7 +24,8 @@ std::map<uint64_t, int64_t> createBalanceForUsers(std::vector<uint64_t> ids,
   std::vector<hub::db::UserTransfer> transfers;
   std::map<uint64_t, int64_t> idsToBalances;
   for (auto id : ids) {
-    transfers.emplace_back(hub::db::UserTransfer{id, balance});
+    transfers.emplace_back(hub::db::
+                           UserTransfer{userId : id, amount : balance});
     idsToBalances[id] = balance;
   }
 

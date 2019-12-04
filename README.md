@@ -11,6 +11,8 @@ See [Getting Started](docs/getting_started.md) for information on how to use the
 ## Supported database systems
 - MariaDB. **DO NOT USE MySQL**. MySQL does not support CHECK constraints for data integrity. *We only test against MariaDB.*
   Please ensure that your MariaDB version is **>= 10.2.1** as this is the first version supporting [CHECK constraints](https://mariadb.com/kb/en/library/constraint/#check-constraints)
+  
+- Source the _delta.xxx.sql_ file if you are updating Hub's version to get all schema changes
 
 ## Developing RPCHub
 - Make sure that `buildifier` and `clang-format` are available on your `PATH`: (`go get -u github.com/bazelbuild/buildtools/buildifier`)
@@ -32,14 +34,16 @@ See [Getting Started](docs/getting_started.md) for information on how to use the
     -salt (Salt for local seed provider) type: string default: "" 
     -listenAddress (address to listen on) type: string default: "0.0.0.0:50051"
     -authMode ("credentials to use. can be {none, ssl}") type: string default: "none"
-    -sslKey docs/ssl/server.key (path to SSL certificate key) type: string default: "/dev/null"
-    -sslCert docs/ssl/server.crt (path to SSL certificate) type: string default: "/dev/null"
-    -sslCA docs/ssl/ca.crt (Path to CA root) type: string default: "/dev/null"
+    -sslKey (path to SSL certificate key) type: string default: "/dev/null"
+    -sslCert (path to SSL certificate) type: string default: "/dev/null"
+    -sslCA  (Path to CA root) type: string default: "/dev/null"
+    -sslDH (Path to Diffie Hellman parameters (when using REST)) type: string default: "/dev/null"
     -maxConcurrentArgon2Hash (Max number of concurrent Argon2 Hash processes) type: int default: 4
     -argon2TCost (Time cost of Argon2) type: int default: 4
     -argon2MCost (Memory cost of Argon2 in bytes) type: int default: 1 << 17
     -argon2Parallelism (Number of threads to use in parallel for Argon2) type: int default: 1
     -argon2Mode (Argon2 mode to use: 1=argon2i;2,else=argon2id) type: int default: 2
+    -keySecLevel (security level to use for IOTA signatures) type:int default: 2
     
   HUB -
 
@@ -53,7 +57,7 @@ See [Getting Started](docs/getting_started.md) for information on how to use the
     -dbType (Type of DB) type: string default: "mariadb"
     -dbUser (Database user) type: string default: "user"
 
-  Flags from hub/server/server.cc:
+  Flags from hub/server/hub_server_base.cc:
     -apiAddress (IRI node api to listen on. Format [host:port]) type: string
       default: "127.0.0.1:14265"
     -attachmentInterval (Attachment service check interval (0=disabled) [ms])
@@ -81,6 +85,13 @@ See [Getting Started](docs/getting_started.md) for information on how to use the
     -sweepInterval (Sweep interval (0=disabled) [ms]) type: uint32
       default: 600000
     -powMode (Proof of work mode, local or remote)
+    -fetchTransactionMessages (Determines if Should store deposit transaction's message) 
+      type: bool (--fetchTransactionMessages or --nofetchTransactionMessages)
+    -useHttpsIRI (Determines if the connection with IRI should be over HTTPS (make sure `apiAddress` supports https)) 
+     type: bool (--useHttpsIRI or --nouseHttpsIRI)
+    -serverType (Which API should server expose {grpc (default), http)
+    -numBundlesToMine: (number of different bundles to mine for generating a signature for already spent addresses) 
+     type: uint32 default: 5000000
 
   Flags from hub/service/sweep_service.cc:
     -sweep_max_deposit (Maximum number of user deposits to process per sweep.)
@@ -88,9 +99,16 @@ See [Getting Started](docs/getting_started.md) for information on how to use the
     -sweep_max_withdraw (Maximum number of withdraw requests to service per
       sweep.) type: uint32 default: 7
       
+  Flags from hub/server/grpc.cc:
+    -SignBundle_enabled (Whether the SignBundle API call should be available) 
+      type: bool (--SignBundle_enabled or --noSignBundle_enabled)
+       
+    -RecoverFunds_enabled (Whether the RecoverFunds API call should be available) 
+      type: bool (--RecoverFunds_enabled or --noRecoverFunds_enabled)
+      
 ```
 
 ## Useful things
 - Use `protofmt` from `go get -u -v github.com/emicklei/proto-contrib/cmd/protofmt` to format protobuf files
-- Use `grpcc` to test: `grpcc -i -a localhost:50051 -p proto/hub.proto`
+- Use `grpcc` to test: `grpcc -i -a localhost:50051 -p proto/hub.proto` (when `serverType grpc`)
 - Use `https://github.com/pseudomuto/protoc-gen-doc` to generate protobuf documentation

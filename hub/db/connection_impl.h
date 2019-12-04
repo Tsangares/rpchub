@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2018 IOTA Stiftung
- * https://github.com/iotaledger/rpchub
+ * https://github.com/iotaledger/hub
  *
  * Refer to the LICENSE file for licensing information
  */
@@ -85,12 +85,14 @@ class ConnectionImpl : public Connection {
   }
 
   void createUserAddressBalanceEntry(
-      uint64_t addressId, int64_t amount, const UserAddressBalanceReason reason,
+      uint64_t addressId, int64_t amount,
+      nonstd::optional<common::crypto::Message> message,
+      const UserAddressBalanceReason reason,
       nonstd::optional<std::string> tailHash,
       nonstd::optional<uint64_t> sweepId) override {
-    db::helper<Conn>::createUserAddressBalanceEntry(*_conn, addressId, amount,
-                                                    reason, std::move(tailHash),
-                                                    std::move(sweepId));
+    db::helper<Conn>::createUserAddressBalanceEntry(
+        *_conn, addressId, amount, message, reason, std::move(tailHash),
+        std::move(sweepId));
   }
 
   void createUserAccountBalanceEntry(
@@ -148,8 +150,9 @@ class ConnectionImpl : public Connection {
   }
 
   std::vector<UserAccountBalanceEvent> getUserAccountBalances(
-      uint64_t userId) override {
-    return db::helper<Conn>::getUserAccountBalances(*_conn, userId);
+      uint64_t userId,
+      std::chrono::system_clock::time_point newerThan) override {
+    return db::helper<Conn>::getUserAccountBalances(*_conn, userId, newerThan);
   }
 
   std::vector<UserAddressBalanceEvent>
@@ -262,6 +265,10 @@ class ConnectionImpl : public Connection {
   nonstd::optional<SweepDetail> getSweepDetailByBundleHash(
       const common::crypto::Hash& bundleHash) override {
     return db::helper<Conn>::getSweepDetailByBundleHash(*_conn, bundleHash);
+  }
+
+  uint64_t getTotalBalance() override {
+    return db::helper<Conn>::getTotalBalance(*_conn);
   }
 
   void execute(const std::string& what) override { _conn->execute(what); }

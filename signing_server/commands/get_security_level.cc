@@ -9,11 +9,11 @@
 namespace signing {
 namespace cmd {
 
-grpc::Status GetSecurityLevel::doProcess(
+    common::cmd::Error GetSecurityLevel::doProcess(
     const signing::rpc::GetSecurityLevelRequest* request,
     signing::rpc::GetSecurityLevelReply* response) noexcept {
   try {
-    LOG(INFO) << session() << " GetSecurityLevel for uuid: "<<request->uuid();
+    LOG(INFO) << session() << " GetSecurityLevel for uuid: " << request->uuid();
 
     auto security = common::crypto::CryptoManager::get()
                         .provider()
@@ -23,12 +23,12 @@ grpc::Status GetSecurityLevel::doProcess(
   } catch (const std::runtime_error& ex) {
     LOG(ERROR) << session() << "Failed: " << ex.what();
 
-    return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION, "", "");
+    return common::cmd::UNKNOWN_ERROR;
   }
 
-  return grpc::Status::OK;
+  return common::cmd::OK;
 }
 
 }  // namespace cmd
 
-}  // namespace crypto
+}  // namespace signing

@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2018 IOTA Stiftung
- * https://github.com/iotaledger/rpchub
+ * https://github.com/iotaledger/hub
  *
  * Refer to the LICENSE file for licensing information
  */
@@ -37,7 +37,7 @@ struct UserAccountBalanceEvent {
   std::string userIdentifier;
   std::chrono::system_clock::time_point timestamp;
   int64_t amount;
-  UserAccountBalanceReason type;
+  UserAccountBalanceReason reason;
   std::string sweepBundleHash;
   std::string withdrawalUUID;
 };
@@ -51,6 +51,7 @@ struct UserAddressBalanceEvent {
   // Bundle hash of sweep (if reason == SWEEP)
   std::string hash;
   std::chrono::system_clock::time_point timestamp;
+  std::string message;
 };
 
 struct HubAddressBalanceEvent {
@@ -94,12 +95,13 @@ struct WithdrawalInfo {
   uint64_t id;
   uint64_t userId;
   int64_t amount;
+  bool wasCancelled;
 };
 
 struct TransferInput {
  public:
   int64_t addressId;
-  int64_t userId;
+  uint64_t userId;
   common::crypto::Address address;
   common::crypto::UUID uuid;
   uint64_t amount;
@@ -115,6 +117,7 @@ struct TransferOutput {
 
 struct AddressInfo {
  public:
+  uint64_t id;
   std::string userId;
   common::crypto::UUID uuid;
   bool usedForSweep;

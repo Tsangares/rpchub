@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2018 IOTA Stiftung
- * https://github.com/iotaledger/rpchub
+ * https://github.com/iotaledger/hub
  *
  * Refer to the LICENSE file for licensing information
  */
@@ -11,17 +11,15 @@
 #include <chrono>
 #include <cstdint>
 #include <map>
-#include <memory>
-#include <nonstd/optional.hpp>
 #include <set>
 #include <string>
 #include <tuple>
 #include <unordered_map>
-#include <utility>
 #include <vector>
 
+#include <nonstd/optional.hpp>
+
 #include "common/crypto/types.h"
-#include "hub/db/db.h"
 #include "hub/db/helper.h"
 #include "hub/db/types.h"
 
@@ -80,7 +78,9 @@ class Connection {
   /// @param[in] tailHash - tailHash of the correpsonding transaction
   /// @param[in] sweepId - if the new balance is the result of a sweep
   virtual void createUserAddressBalanceEntry(
-      uint64_t addressId, int64_t amount, const UserAddressBalanceReason reason,
+      uint64_t addressId, int64_t amount,
+      nonstd::optional<common::crypto::Message> message,
+      const UserAddressBalanceReason reason,
       nonstd::optional<std::string> tailHash,
       nonstd::optional<uint64_t> sweepId) = 0;
 
@@ -135,9 +135,10 @@ class Connection {
 
   /// Get a list of account balances for a user
   /// @param[in] userId - the user id in the database
+  /// @param[in] newerThan - the start point in time
   /// @return std::vector - a list of UserAccountBalanceEvent for this user
   virtual std::vector<UserAccountBalanceEvent> getUserAccountBalances(
-      uint64_t userId) = 0;
+      uint64_t userId, std::chrono::system_clock::time_point newerThan) = 0;
 
   /// Get a list of unconfirmed sweeps
   /// @param[in] olderThan - the cutoff point in time
@@ -299,6 +300,10 @@ class Connection {
   /// @return nonstd::optional<SweepDetail> - the sweep details  if found
   virtual nonstd::optional<SweepDetail> getSweepDetailByBundleHash(
       const common::crypto::Hash& bundleHash) = 0;
+
+  /// Provides the total amount of user funds currently managed by the Hub
+  /// @return uint64_t - the total user account balance
+  virtual uint64_t getTotalBalance() = 0;
 
  private:
   friend class DBManager;
